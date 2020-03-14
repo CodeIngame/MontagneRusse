@@ -19,12 +19,13 @@ namespace MontagneRusse
 
             int NumberOfSeats = int.Parse(inputs[0]);
             int Capacity = int.Parse(inputs[1]);
-            int NumberOfGroupe = int.Parse(inputs[2]);
+            int NumberOfGroups = int.Parse(inputs[2]);
 
             var queue = new Queue<Group>();
-            Enumerable.Range(0, NumberOfGroupe)
+            Enumerable.Range(0, NumberOfGroups)
                 .ToList()
-                .ForEach(i => {
+                .ForEach(i =>
+                {
 #if (!DEBUG)
                     queue.Enqueue(new Group { Lenght = int.Parse(Console.ReadLine()) } );
 #else
@@ -32,13 +33,17 @@ namespace MontagneRusse
 #endif
                 });
 
-            var rideService = new RideService { Ride = new Ride { MaxCapacity = Capacity, MaxNumberOfSeats = NumberOfSeats }, Queue = queue };
-            rideService.Previsualisation();
-            rideService.DoWork();
+            var rideService = new RideService { Ride = new Ride { MaxCapacity = Capacity, MaxNumberOfSeats = NumberOfSeats }, Queue = queue, NumberOfGroups = NumberOfGroups };
+            //rideService.Previsualisation();
+            //rideService.DoWork();
+
+            var betterRideSerice = new BetterRideService { Ride = new Ride { MaxCapacity = Capacity, MaxNumberOfSeats = NumberOfSeats }, Queue = queue.ToList(), NumberOfGroups = NumberOfGroups };
+            // betterRideSerice.Previsualisation();
+            betterRideSerice.DoWork();
             // Write an action using Console.WriteLine()
             // To debug: Console.Error.WriteLine("Debug messages...");
 
-            Console.WriteLine(rideService.Money);
+            Console.WriteLine(betterRideSerice.Money);
         }
     }
 
@@ -77,8 +82,10 @@ namespace MontagneRusse
         public Queue<Group> Queue { get; set; }
 
         public int NumberOfTurn { get; private set; } = 0;
-        public int AvailableSeat { get; private set; }
-        
+        public int AvailableSeat { get; set; }
+
+        public int NumberOfGroups { get; set; }
+
         public void Previsualisation()
         {
             char quote = '"';
@@ -86,7 +93,7 @@ namespace MontagneRusse
             // Console.Error.WriteLine($"MaxNumberOfSeats : {Ride.MaxNumberOfSeats} - MaxCapacity : {Ride.MaxCapacity} - NbGroup : {Queue.Count} - Queue {String.Join(", ", Queue.ToList().Select(i => $"{quote}{i.Lenght}{quote}"))}");
         }
 
-        public void DoWork()
+        public virtual void DoWork()
         {
             // https://fr.wikipedia.org/wiki/Algorithme_du_li%C3%A8vre_et_de_la_tortue
 
@@ -99,7 +106,7 @@ namespace MontagneRusse
                 // Console.Error.WriteLine($"({i}) New turn will start !");
                 Reset();
                 hs.Clear();
-                while(AvailableSeat > 0 && Queue.Peek().Lenght <= AvailableSeat && hs.Add(Queue.Peek().Id))
+                while (AvailableSeat > 0 && Queue.Peek().Lenght <= AvailableSeat && hs.Add(Queue.Peek().Id))
                 {
                     var currentGroup = Queue.Dequeue();
                     AvailableSeat -= currentGroup.Lenght;
@@ -115,12 +122,71 @@ namespace MontagneRusse
             Console.Error.WriteLine($"Ellapsed time : {sw.Elapsed.TotalSeconds}");
         }
 
-        private void Reset()
+        public void Reset()
         {
             this.AvailableSeat = this.Ride.MaxNumberOfSeats;
             // trop lent
             //Queue.ToList().ForEach(g => g.OnRide = false);
         }
     }
-     
+
+    public class BetterRideService
+        : RideService
+    {
+        public new List<Group> Queue { get; set; }
+
+        public override void DoWork()
+        {
+            var maxLoop = Ride.MaxCapacity;
+            var previousResults = new Dictionary<int, Memory>();
+            var i = 0;
+            while(maxLoop > 0)
+            {
+                this.Reset();
+                if(previousResults.ContainsKey(i))
+                {
+                    var currentResult = previousResults[i];
+                    Money += currentResult.MoneyEarned;
+                    i = currentResult.Index;
+                } 
+                else
+                {
+                    var currentIndexCycle = i;
+                    var moneyBeforeCycle = Money;
+                    int numberOfGroupInside = 0; 
+
+                    while(AvailableSeat >= Queue[i].Lenght)
+                    {
+                        if (numberOfGroupInside >= this.NumberOfGroups)
+                            break;
+
+                        numberOfGroupInside++;
+
+                        var currentGroup = Queue[i];
+
+                        int numberOfPerson = currentGroup.Lenght;
+                        Money += numberOfPerson;
+                        this.AvailableSeat -= numberOfPerson;
+
+                        i++;
+
+                        if (i >= NumberOfGroups)
+                            i = 0;
+                    }
+                    previousResults.Add(currentIndexCycle, new Memory { MoneyEarned = Money - moneyBeforeCycle, Index = i });
+                }
+
+
+                maxLoop--;
+            }
+
+        }
+    }
+
+
+    public class Memory
+    {
+        public long MoneyEarned { get; set; }
+        public int Index { get; set; }
+    }
 }
